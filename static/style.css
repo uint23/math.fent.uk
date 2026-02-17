@@ -1,0 +1,42 @@
+body {
+	color: #eeeeee;
+	background-color: #1e1f21;
+	font-family: serif;
+	margin: 20px;
+}
+
+h1 {
+	font-weight: normal;
+}
+
+a {
+	color: inherit;
+}
+
+ul {
+	padding-left: 18px;
+}
+
+li {
+	margin: 4px 0;
+}
+
+img {
+	max-width: 100%;
+	margin: 20px 0;
+}
+
+details {
+	margin-top: 20px;
+}
+
+footer {
+	margin-top: 60px;
+	font-size: 0.9em;
+	opacity: 0.6;
+}
+
+code {
+	font-family: monospace;
+}
+
