@@ -42,6 +42,30 @@ func basebot() string {
 `
 }
 
+func formatdate(id string) string {
+	if len(id) != 6 {
+		return id
+	}
+	return id[0:2] + "/" + id[2:4] + "/" + id[4:6]
+}
+
+func extracttitle(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+
+	lines := strings.Split(string(b), "\n")
+	for _, l := range lines {
+		l = strings.TrimSpace(l)
+		if strings.HasPrefix(l, "## ") {
+			return strings.TrimSpace(strings.TrimPrefix(l, "## "))
+		}
+	}
+
+	return ""
+}
+
 func todayid() string {
 	location, err := time.LoadLocation("Europe/London")
 	if err != nil {
@@ -81,31 +105,53 @@ func serveindex(w http.ResponseWriter) {
 		return
 	}
 
-	var files []string
+	type item struct {
+		file  string
+		title string
+	}
+
+	var items []item
+
 	for _, e := range ents {
 		if e.IsDir() {
 			continue
 		}
 		name := e.Name()
-		if strings.HasSuffix(name, ".md") {
-			files = append(files, strings.TrimSuffix(name, ".md")+".html")
+		if !strings.HasSuffix(name, ".md") {
+			continue
 		}
+
+		id := strings.TrimSuffix(name, ".md")
+		path := filepath.Join(probDir, name)
+		title := extracttitle(path)
+		date := formatdate(id)
+
+		if title == "" {
+			title = id
+		}
+
+		items = append(items, item{
+			file:  id + ".html",
+			title: "[" + date + "] " + title,
+		})
 	}
 
-	sort.Slice(files, func(i, j int) bool {
+	sort.Slice(items, func(i, j int) bool {
 		/* newest first */
-		return files[i] > files[j]
+		return items[i].file > items[j].file
 	})
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, basetop("Problems"))
 	fmt.Fprint(w, "<h3>Problems</h3>\n<ul>\n")
-	for _, f := range files {
+
+	for _, it := range items {
 		fmt.Fprintf(w, `<li><a href="/problems/%s">%s</a></li>`+"\n",
-			html.EscapeString(f),
-			html.EscapeString(strings.TrimSuffix(f, ".html")),
+			html.EscapeString(it.file),
+			html.EscapeString(it.title),
 		)
 	}
+
 	fmt.Fprint(w, "</ul>\n")
 	fmt.Fprint(w, basebot())
 }
