@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"html"
 	"net/http"
@@ -10,11 +11,15 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/yuin/goldmark"
 )
 
 const (
 	probDir = "/math.fent.uk/problems" /* inside /var/www chroot */
 )
+
+var md = goldmark.New()
 
 func basetop(title string) string {
 	return `
@@ -46,6 +51,29 @@ func todayid() string {
 	return now.Format("020106") /* DDMMYY */
 }
 
+func rendermarkdown(src []byte) (string, bool) {
+	var out bytes.Buffer
+
+	if err := md.Convert(src, &out); err != nil {
+		return "", false
+	}
+
+	return out.String(), true
+}
+
+func splitmd(mdsrc string) (prob string, sol string) {
+	lines := strings.Split(mdsrc, "\n")
+	for i := 0; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "### Solution" {
+			prob = strings.Join(lines[:i], "\n")
+			sol = strings.Join(lines[i+1:], "\n")
+			return
+		}
+	}
+
+	return mdsrc, ""
+}
+
 func serveindex(w http.ResponseWriter) {
 	ents, err := os.ReadDir(probDir)
 	if err != nil {
@@ -59,8 +87,8 @@ func serveindex(w http.ResponseWriter) {
 			continue
 		}
 		name := e.Name()
-		if strings.HasSuffix(name, ".html") {
-			files = append(files, name)
+		if strings.HasSuffix(name, ".md") {
+			files = append(files, strings.TrimSuffix(name, ".md")+".html")
 		}
 	}
 
@@ -93,16 +121,39 @@ func serveproblem(w http.ResponseWriter, file string) {
 		return
 	}
 
-	path := filepath.Join(probDir, file)
+	mdfile := strings.TrimSuffix(file, ".html") + ".md"
+	path := filepath.Join(probDir, mdfile)
 	b, err := os.ReadFile(path)
 	if err != nil {
 		http.NotFound(w, nil)
 		return
 	}
 
+	probmd, solmd := splitmd(string(b))
+
+	probhtml, ok := rendermarkdown([]byte(probmd))
+	if !ok {
+		http.Error(w, "markdown error", 500)
+		return
+	}
+
+	solhtml := ""
+	if strings.TrimSpace(solmd) != "" {
+		solhtml, ok = rendermarkdown([]byte(solmd))
+		if !ok {
+			http.Error(w, "markdown error", 500)
+			return
+		}
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, basetop("Daily Math Puzzles"))
-	fmt.Fprint(w, string(b))
+	fmt.Fprint(w, probhtml)
+	if solhtml != "" {
+		fmt.Fprint(w, "<details>\n<summary>Solution</summary>\n")
+		fmt.Fprint(w, solhtml)
+		fmt.Fprint(w, "\n</details>\n")
+	}
 	fmt.Fprint(w, basebot())
 }
 
